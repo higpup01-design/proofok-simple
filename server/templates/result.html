@@ -1,0 +1,22 @@
+<!doctype html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Result</title>
+<style>
+body{font-family:Arial,Helvetica,sans-serif;margin:0;background:#0b0c10;color:#eaf0f1}
+main{max-width:720px;margin:40px auto;padding:20px;background:#1b2430;border-radius:14px}
+.ok{background:#133b2f;color:#c6f7e2;padding:10px;border-radius:12px}
+.warn{background:#3b2f13;color:#f7e2c6;padding:10px;border-radius:12px;margin-top:10px;white-space:pre-wrap}
+a{color:#66fcf1}
+</style></head><body>
+<main>
+  {% if ok %}
+    <div class="ok">{{ message or "Your decision was recorded." }}</div>
+    {% if warning %}<div class="warn">{{ warning }}</div>{% endif %}
+  {% else %}
+    <div class="warn">{{ message or "There was a problem submitting your decision." }}</div>
+  {% endif %}
+  <p style="margin-top:14px">
+    <a href="{{ base_url }}/proof/{{ token }}">Back to proof</a> -
+    <a href="{{ base_url }}/healthz">Server health</a> ({{ version }})
+  </p>
+</main>
+</body></html>
