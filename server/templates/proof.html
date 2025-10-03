@@ -16,24 +16,46 @@ main{display:grid;grid-template-columns:1.1fr 0.9fr;gap:16px;padding:16px}
 .ok{background:#1f8a4c;color:white}.rej{background:#c0392b;color:white}
 @media(max-width:900px){main{grid-template-columns:1fr}.pdf{height:70vh}}
 .muted{opacity:.7}
+.info{background:#133b2f;color:#c6f7e2;padding:12px;border-radius:12px;margin-bottom:10px}
+.warn{background:#3b2f13;color:#f7e2c6;padding:12px;border-radius:12px;margin-bottom:10px;white-space:pre-wrap}
 </style></head><body>
 <header><h1>Color Magic - Proof: {{ original_name }}</h1></header>
 <main>
   <section class="pdf"><iframe src="{{ pdf_url }}"></iframe></section>
   <section class="panel">
-    <h2>Approve / Reject</h2>
-    <form action="/respond/{{ token }}" method="post">
-      <div class="row">
-        <div class="field" style="flex:1"><input name="viewer_name" placeholder="Your name"></div>
-        <div class="field" style="flex:1"><input name="viewer_email" placeholder="Your email (optional)"></div>
-      </div>
-      <div class="field"><textarea name="comment" rows="6" placeholder="Comments (required if rejecting)"></textarea></div>
-      <div class="btns">
-        <button class="btn ok" type="submit" name="decision" value="approved">OK to PRINT</button>
-        <button class="btn rej" type="submit" name="decision" value="rejected">Reject</button>
+    {% if readonly %}
+      <h2>Decision Recorded</h2>
+      <div class="info">
+        <p>This proof has already been logged and submitted. It is read-only.</p>
+        {% if last_decision %}
+          <p><b>Decision:</b> {{ last_decision|upper }}</p>
+        {% endif %}
+        {% if last_name or last_email %}
+          <p><b>Submitted by:</b> {{ last_name }}{% if last_email %} &lt;{{ last_email }}&gt;{% endif %}</p>
+        {% endif %}
+        {% if last_ts %}
+          <p><b>Time (UTC):</b> {{ last_ts }}</p>
+        {% endif %}
+        {% if last_comment %}
+          <p><b>Comment:</b><br>{{ last_comment }}</p>
+        {% endif %}
       </div>
       <p class="muted">Token: {{ token }} &nbsp; Version: {{ version }}</p>
-    </form>
+    {% else %}
+      <h2>Approve / Reject</h2>
+      <form action="/respond/{{ token }}" method="post">
+        <div class="row">
+          <div class="field" style="flex:1"><input name="viewer_name" placeholder="Your name"></div>
+          <div class="field" style="flex:1"><input name="viewer_email" placeholder="Your email (optional)"></div>
+        </div>
+        <div class="field"><textarea name="comment" rows="6" placeholder="Comments (required if rejecting)"></textarea></div>
+        <div class="btns">
+          <button class="btn ok" type="submit" name="decision" value="approved">OK to PRINT</button>
+          <button class="btn rej" type="submit" name="decision" value="rejected">Reject</button>
+        </div>
+        <p class="muted">Token: {{ token }} &nbsp; Version: {{ version }}</p>
+      </form>
+    {% endif %}
   </section>
 </main>
 </body></html>
