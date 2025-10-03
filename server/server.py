@@ -11,7 +11,7 @@ from flask import Flask, request, send_from_directory, render_template, abort, j
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail, Email, Content
 
-VERSION = "proofok-simple-sendgrid-v2.1-debug"
+VERSION = "proofok-simple-sendgrid-v2.2-readonly"
 
 # --- Email (SendGrid over HTTPS) ---
 SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY", "")
@@ -59,14 +59,16 @@ def load_record(token):
     with open(p, "r", encoding="utf-8") as f:
         return json.load(f)
 
+def last_response(rec):
+    arr = rec.get("responses") or []
+    return arr[-1] if arr else None
+
 def send_via_sendgrid(subject, html, text):
     """Send an email using SendGrid SDK over HTTPS."""
     if not SENDGRID_API_KEY:
         raise RuntimeError("Missing SENDGRID_API_KEY")
 
-    # Debug pre-send
-    log.info("EMAIL: preparing SendGrid message | from=%s to=%s subject=%s",
-             FROM_EMAIL, TO_EMAIL, subject)
+    log.info("EMAIL: preparing | from=%s to=%s subject=%s", FROM_EMAIL, TO_EMAIL, subject)
 
     message = Mail(
         from_email=FROM_EMAIL,
@@ -74,31 +76,25 @@ def send_via_sendgrid(subject, html, text):
         subject=subject,
         html_content=html
     )
-    # Add a text/plain alternative part
     message.add_content(Content("text/plain", text))
-    # Ensure replies go to your orders inbox
     message.reply_to = Email(TO_EMAIL)
 
     sg = SendGridAPIClient(SENDGRID_API_KEY)
     resp = sg.send(message)
 
-    # Debug post-send
     code = getattr(resp, "status_code", None)
-    # resp.body may be bytes; decode safely
     try:
         body = getattr(resp, "body", b"")
         if isinstance(body, (bytes, bytearray)):
             body = body.decode("utf-8", "ignore")
     except Exception:
         body = "<unreadable>"
-    log.info("EMAIL: SendGrid response | status=%s body=%s", code, body)
+    log.info("EMAIL: response | status=%s body=%s", code, body)
 
-    # SendGrid returns HTTP 202 on success
     if code is None or code >= 300:
         raise RuntimeError(f"SendGrid error {code}: {body}")
 
 def send_email(subject, html, text):
-    # Only SendGrid is used in this build
     send_via_sendgrid(subject, html, text)
 
 def email_body(rec, decision, event):
@@ -236,6 +232,11 @@ def proof_page(token):
     rec = load_record(token)
     if not rec:
         abort(404)
+
+    # If already submitted, show read-only message (no buttons)
+    readonly = rec.get("status") != "pending"
+    last = last_response(rec) if readonly else None
+
     return render_template(
         "proof.html",
         token=token,
@@ -243,6 +244,13 @@ def proof_page(token):
         pdf_url=url_for("serve_pdf", token=token, filename=rec["stored_name"]),
         base_url=base_url(),
         version=VERSION,
+        status=rec.get("status", "pending"),
+        last_decision=(last or {}).get("decision", ""),
+        last_name=(last or {}).get("viewer_name", ""),
+        last_email=(last or {}).get("viewer_email", ""),
+        last_comment=(last or {}).get("comment", ""),
+        last_ts=(last or {}).get("ts_utc", ""),
+        readonly=readonly,
     )
 
 @app.get("/p/<token>/<path:filename>")
@@ -265,6 +273,18 @@ def respond_form(token):
             version=VERSION,
             token=token,
             original_name="",
+            base_url=base_url(),
+        )
+
+    # NEW: block second submissions
+    if rec.get("status") != "pending":
+        return render_template(
+            "result.html",
+            ok=False,
+            message="This proof has already been submitted.",
+            version=VERSION,
+            token=token,
+            original_name=rec["original_name"],
             base_url=base_url(),
         )
 
@@ -309,7 +329,6 @@ def respond_form(token):
     rec.setdefault("responses", []).append(event)
     save_record(token, rec)
 
-    # DEBUG: log what we are about to send
     log.info("RESPOND: token=%s decision=%s viewer=%s <%s> ip=%s",
              token, decision, viewer_name, viewer_email, ip)
 
