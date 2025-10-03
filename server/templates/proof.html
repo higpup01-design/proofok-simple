@@ -3,9 +3,12 @@
 <title>Proof - {{ original_name }}</title>
 <style>
 body{font-family:Arial,Helvetica,sans-serif;margin:0;background:#0b0c10;color:#eaf0f1}
-header{padding:16px 20px;background:#111820}
+header{padding:12px 16px;background:#111820;border-bottom:1px solid #222}
+.brand{display:flex;align-items:center;gap:12px}
+.brand img.logo{height:42px;width:auto;display:block}
+.brand .title{font-weight:700;font-size:18px;letter-spacing:.3px}
 main{display:grid;grid-template-columns:1.1fr 0.9fr;gap:16px;padding:16px}
-.pdf{background:#1b2430;border-radius:14px;overflow:hidden;height:calc(100vh - 100px)}
+.pdf{background:#1b2430;border-radius:14px;overflow:hidden;height:calc(100vh - 105px)}
 .pdf iframe{width:100%;height:100%;border:0;background:white}
 .panel{background:#1b2430;border-radius:14px;padding:16px}
 .field{margin:12px 0}
@@ -19,9 +22,16 @@ main{display:grid;grid-template-columns:1.1fr 0.9fr;gap:16px;padding:16px}
 .info{background:#133b2f;color:#c6f7e2;padding:12px;border-radius:12px;margin-bottom:10px}
 .warn{background:#3b2f13;color:#f7e2c6;padding:12px;border-radius:12px;margin-bottom:10px;white-space:pre-wrap}
 </style></head><body>
-<header><h1>Color Magic - Proof: {{ original_name }}</h1></header>
+<header>
+  <div class="brand">
+    <img class="logo" src="{{ url_for('static', filename='logo.png') }}" alt="Color Magic Logo">
+    <div class="title">Color Magic — Proof: {{ original_name }}</div>
+  </div>
+</header>
+
 <main>
   <section class="pdf"><iframe src="{{ pdf_url }}"></iframe></section>
+
   <section class="panel">
     {% if readonly %}
       <h2>Decision Recorded</h2>
