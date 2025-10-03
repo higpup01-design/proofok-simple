@@ -3,6 +3,7 @@ import os
 import uuid
 import json
 import datetime
+import logging
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
 from flask import Flask, request, send_from_directory, render_template, abort, jsonify, url_for
 
@@ -10,7 +11,7 @@ from flask import Flask, request, send_from_directory, render_template, abort, j
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail, Email, Content
 
-VERSION = "proofok-simple-sendgrid-v2"
+VERSION = "proofok-simple-sendgrid-v2.1-debug"
 
 # --- Email (SendGrid over HTTPS) ---
 SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY", "")
@@ -29,6 +30,10 @@ UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
 DATA_DIR   = os.path.join(BASE_DIR, "data")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(DATA_DIR,   exist_ok=True)
+
+# Logging (to Render logs)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+log = app.logger
 
 executor = ThreadPoolExecutor(max_workers=2)
 
@@ -59,6 +64,10 @@ def send_via_sendgrid(subject, html, text):
     if not SENDGRID_API_KEY:
         raise RuntimeError("Missing SENDGRID_API_KEY")
 
+    # Debug pre-send
+    log.info("EMAIL: preparing SendGrid message | from=%s to=%s subject=%s",
+             FROM_EMAIL, TO_EMAIL, subject)
+
     message = Mail(
         from_email=FROM_EMAIL,
         to_emails=TO_EMAIL,
@@ -72,9 +81,21 @@ def send_via_sendgrid(subject, html, text):
 
     sg = SendGridAPIClient(SENDGRID_API_KEY)
     resp = sg.send(message)
+
+    # Debug post-send
+    code = getattr(resp, "status_code", None)
+    # resp.body may be bytes; decode safely
+    try:
+        body = getattr(resp, "body", b"")
+        if isinstance(body, (bytes, bytearray)):
+            body = body.decode("utf-8", "ignore")
+    except Exception:
+        body = "<unreadable>"
+    log.info("EMAIL: SendGrid response | status=%s body=%s", code, body)
+
     # SendGrid returns HTTP 202 on success
-    if resp.status_code >= 300:
-        raise RuntimeError(f"SendGrid error {resp.status_code}: {getattr(resp, 'body', b'').decode('utf-8', 'ignore')}")
+    if code is None or code >= 300:
+        raise RuntimeError(f"SendGrid error {code}: {body}")
 
 def send_email(subject, html, text):
     # Only SendGrid is used in this build
@@ -288,24 +309,33 @@ def respond_form(token):
     rec.setdefault("responses", []).append(event)
     save_record(token, rec)
 
+    # DEBUG: log what we are about to send
+    log.info("RESPOND: token=%s decision=%s viewer=%s <%s> ip=%s",
+             token, decision, viewer_name, viewer_email, ip)
+
     warning = ""
     subj, html, text = email_body(rec, decision, event)
 
     if EMAIL_MODE == "off":
-        pass
+        log.info("EMAIL: mode=off (skipping send)")
     elif EMAIL_MODE == "sync":
         try:
             send_email(subj, html, text)
+            log.info("EMAIL: sync send completed ok")
         except Exception as e:
             warning = f"Email send failed: {e}"
+            log.error("EMAIL: sync send failed | %s", e, exc_info=True)
     else:
         try:
             fut = executor.submit(send_email, subj, html, text)
             fut.result(timeout=SMTP_TIMEOUT)
+            log.info("EMAIL: async send completed ok (within timeout)")
         except FuturesTimeout:
             warning = f"Email is sending in background (timeout {SMTP_TIMEOUT}s)."
+            log.warning("EMAIL: async send timed out after %ss", SMTP_TIMEOUT)
         except Exception as e:
             warning = f"Email send failed: {e}"
+            log.error("EMAIL: async send failed | %s", e, exc_info=True)
 
     return render_template(
         "result.html",
